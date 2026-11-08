@@ -1,0 +1,25 @@
+create extension if not exists pgcrypto;
+create table if not exists public.profiles(id uuid primary key references auth.users(id) on delete cascade,full_name text,role text not null default 'staff' check(role in('admin','staff')),created_at timestamptz default now());
+create table if not exists public.admissions(id uuid primary key default gen_random_uuid(),student_name text not null,dob date not null,applying_for text not null,parent_name text not null,email text not null,phone text not null,previous_school text,message text,status text not null default 'New' check(status in('New','Contacted','Under review','Accepted','Waitlisted','Rejected')),created_at timestamptz default now());
+create table if not exists public.events(id uuid primary key default gen_random_uuid(),title text not null,event_date date not null,category text,description text,published boolean not null default false,created_at timestamptz default now());
+create table if not exists public.gallery_items(id uuid primary key default gen_random_uuid(),caption text,image_url text not null,published boolean not null default false,created_at timestamptz default now());
+create table if not exists public.disclosures(id uuid primary key default gen_random_uuid(),title text not null,description text,file_url text not null,published boolean not null default false,sort_order int not null default 0,created_at timestamptz default now());
+create table if not exists public.students(id uuid primary key default gen_random_uuid(),admission_no text not null unique,full_name text not null,class_name text not null,section text not null default 'A',created_at timestamptz default now());
+create table if not exists public.attendance(id uuid primary key default gen_random_uuid(),student_id uuid not null references public.students(id) on delete cascade,attendance_date date not null,status text not null check(status in('Present','Absent','Late','Excused')),created_at timestamptz default now(),unique(student_id,attendance_date));
+create table if not exists public.results(id uuid primary key default gen_random_uuid(),student_id uuid not null references public.students(id) on delete cascade,exam_name text not null,subject text not null,marks numeric(6,2) not null check(marks>=0),max_marks numeric(6,2) not null check(max_marks>0 and marks<=max_marks),created_at timestamptz default now());
+alter table public.profiles enable row level security;alter table public.admissions enable row level security;alter table public.events enable row level security;alter table public.gallery_items enable row level security;alter table public.disclosures enable row level security;alter table public.students enable row level security;alter table public.attendance enable row level security;alter table public.results enable row level security;
+create or replace function public.is_school_admin() returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from public.profiles where id=auth.uid() and role='admin'); $$;
+create policy "public submit admissions" on public.admissions for insert to anon,authenticated with check(length(student_name) between 2 and 120 and length(parent_name) between 2 and 120 and length(email)<=254 and length(phone) between 8 and 18);
+create policy "admin manage admissions" on public.admissions for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+create policy "public read published events" on public.events for select to anon,authenticated using(published=true);
+create policy "admin manage events" on public.events for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+create policy "public read published gallery" on public.gallery_items for select to anon,authenticated using(published=true);
+create policy "admin manage gallery" on public.gallery_items for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+create policy "public read published disclosures" on public.disclosures for select to anon,authenticated using(published=true);
+create policy "admin manage disclosures" on public.disclosures for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+create policy "admin read own profile or manage profiles" on public.profiles for select to authenticated using(id=auth.uid() or public.is_school_admin());
+create policy "admin manage student records" on public.students for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+create policy "admin manage attendance" on public.attendance for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+create policy "admin manage results" on public.results for all to authenticated using(public.is_school_admin()) with check(public.is_school_admin());
+-- After creating an auth user in Supabase Dashboard, provision its role:
+-- insert into public.profiles(id,full_name,role) values('AUTH-USER-UUID','School Administrator','admin');

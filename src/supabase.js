@@ -1,0 +1,1 @@
+import{createClient}from'@supabase/supabase-js';const url=import.meta.env.VITE_SUPABASE_URL;const key=import.meta.env.VITE_SUPABASE_ANON_KEY;export const ready=!!(url&&key);export const db=ready?createClient(url,key):null;
